@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +14,7 @@ namespace WinFormsApp
         private readonly HttpClient _httpClient;
         private const string BaseUrl = "http://localhost:5041/api/products";
         private int selectedProductId = 0;
+        private List<Product> allProducts = new List<Product>(); // Lưu toàn bộ danh sách để tìm kiếm
 
         public Form1()
         {
@@ -39,6 +41,70 @@ namespace WinFormsApp
                 txtName.Text = selectedRow.Cells["Name"].Value?.ToString() ?? "";
                 txtPrice.Text = selectedRow.Cells["Price"].Value?.ToString() ?? "";
                 txtDescription.Text = selectedRow.Cells["Description"].Value?.ToString() ?? "";
+            }
+        }
+
+        // Chức năng tìm kiếm theo tên
+        private void txtSearch_TextChanged(object sender, EventArgs e)
+        {
+            string searchText = txtSearch.Text.ToLower().Trim();
+
+            if (string.IsNullOrEmpty(searchText))
+            {
+                // Hiển thị toàn bộ danh sách khi không có từ khóa tìm kiếm
+                dataGridView1.DataSource = allProducts;
+            }
+            else
+            {
+                // Lọc sản phẩm theo tên
+                var filteredProducts = allProducts.Where(p =>
+                    p.Name.ToLower().Contains(searchText)).ToList();
+                dataGridView1.DataSource = filteredProducts;
+            }
+
+            // Cập nhật tên cột sau khi thay đổi DataSource
+            UpdateColumnHeaders();
+        }
+
+        // Lấy sản phẩm theo ID
+        private async void btnGetById_Click(object sender, EventArgs e)
+        {
+            if (selectedProductId == 0)
+            {
+                MessageBox.Show("Vui lòng chọn một sản phẩm để xem chi tiết!", "Thông báo");
+                return;
+            }
+
+            try
+            {
+                var response = await _httpClient.GetAsync($"{BaseUrl}/{selectedProductId}");
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonString = await response.Content.ReadAsStringAsync();
+                    var product = JsonSerializer.Deserialize<Product>(jsonString, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    if (product != null)
+                    {
+                        // Hiển thị thông tin sản phẩm
+                        MessageBox.Show($"Thông tin sản phẩm:\n" +
+                                      $"ID: {product.Id}\n" +
+                                      $"Tên: {product.Name}\n" +
+                                      $"Giá: {product.Price:C}\n" +
+                                      $"Mô tả: {product.Description}",
+                                      "Chi tiết sản phẩm");
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"Không tìm thấy sản phẩm với ID: {selectedProductId}", "Thông báo");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi lấy thông tin sản phẩm: {ex.Message}", "Lỗi");
             }
         }
 
@@ -174,9 +240,26 @@ namespace WinFormsApp
             }
         }
 
+        // Chức năng xóa danh sách (Clear form và reset DataGridView)
         private void btnClear_Click(object sender, EventArgs e)
         {
-            ClearForm();
+            var result = MessageBox.Show("Bạn có muốn xóa toàn bộ danh sách hiển thị không?",
+                                       "Xác nhận", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                // Xóa danh sách hiển thị
+                dataGridView1.DataSource = null;
+                allProducts.Clear();
+
+                // Xóa thông tin trong form
+                ClearForm();
+
+                // Xóa text tìm kiếm
+                txtSearch.Clear();
+
+                MessageBox.Show("Đã xóa danh sách hiển thị!", "Thông báo");
+            }
         }
 
         // Các method hỗ trợ
@@ -193,19 +276,10 @@ namespace WinFormsApp
                         PropertyNameCaseInsensitive = true
                     });
 
-                    dataGridView1.DataSource = products;
+                    allProducts = products ?? new List<Product>();
+                    dataGridView1.DataSource = allProducts;
 
-                    // Đặt tên cột tiếng Việt
-                    if (dataGridView1.Columns.Count > 0)
-                    {
-                        dataGridView1.Columns["Id"].HeaderText = "Mã SP";
-                        dataGridView1.Columns["Name"].HeaderText = "Tên sản phẩm";
-                        dataGridView1.Columns["Price"].HeaderText = "Giá";
-                        dataGridView1.Columns["Description"].HeaderText = "Mô tả";
-
-                        // Tự động điều chỉnh độ rộng cột
-                        dataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-                    }
+                    UpdateColumnHeaders();
                 }
                 else
                 {
@@ -215,6 +289,21 @@ namespace WinFormsApp
             catch (Exception ex)
             {
                 MessageBox.Show($"Lỗi kết nối: {ex.Message}\n\nVui lòng kiểm tra:\n1. WebAPI đã chạy chưa?\n2. URL có đúng không?", "Lỗi kết nối");
+            }
+        }
+
+        private void UpdateColumnHeaders()
+        {
+            // Đặt tên cột tiếng Việt
+            if (dataGridView1.Columns.Count > 0)
+            {
+                dataGridView1.Columns["Id"].HeaderText = "Mã SP";
+                dataGridView1.Columns["Name"].HeaderText = "Tên sản phẩm";
+                dataGridView1.Columns["Price"].HeaderText = "Giá";
+                dataGridView1.Columns["Description"].HeaderText = "Mô tả";
+
+                // Tự động điều chỉnh độ rộng cột
+                dataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             }
         }
 
